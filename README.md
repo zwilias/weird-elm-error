@@ -1,5 +1,4 @@
 
 ```
-elm-reactor
-open http://localhost:8000/test.html
+elm-live Test.elm --open
 ```

@@ -65,15 +65,8 @@ map fn (Parser parserFn) =
 
 {-| -}
 apply : Parser (a -> b) -> Parser a -> Parser b
-apply (Parser aToBFn) (Parser nextFn) =
-    Parser <|
-        \tape ->
-            case aToBFn tape of
-                Ok ( fn, tape_ ) ->
-                    nextFn tape_ |> Result.map (Tuple.mapFirst fn)
-
-                Err e ->
-                    Err e
+apply aToB next =
+    aToB |> andThen (\fn -> map fn next)
 
 
 {-| -}
@@ -131,12 +124,11 @@ take count =
 parseInt : Parser Int
 parseInt =
     map
-        (Tuple.second
-            << List.foldl
-                (\value ( shift, acc ) ->
-                    ( shift - 1, acc + Bitwise.shiftLeftBy (4 * shift) value )
-                )
-                ( intLength - 1, 0 )
+        (List.foldl
+            (\value acc ->
+                Bitwise.shiftLeftBy 4 acc + value
+            )
+            0
         )
         (take intLength)
 
@@ -194,66 +186,22 @@ run (Parser parserFn) tape =
     parserFn tape
 
 
-oneOf : List (Parser a) -> Parser a
-oneOf options =
-    Parser <|
-        \tape ->
-            List.foldl
-                (\parser acc ->
-                    case acc of
-                        Nothing ->
-                            case run parser tape of
-                                Err _ ->
-                                    Nothing
-
-                                Ok res ->
-                                    Just <| Ok res
-
-                        Just _ ->
-                            acc
-                )
-                Nothing
-                options
-                |> Maybe.withDefault (Err "None worked :(")
-
-
-{-| parseMaybe : Parser a -> Parser (Maybe a)
-parseMaybe p tape =
-case tape of
-0 :: rest ->
-Ok ( Nothing, rest )
-
-        1 :: list ->
-            map Just p list
-
-        _ ->
-            Err ">>>>>"
-
--}
+{-| -}
 parseMaybe : Parser a -> Parser (Maybe a)
 parseMaybe parser =
-    oneOf
-        [ map Just parser
-        , succeed Nothing
+    parseUnion
+        [ ( 0, succeed Nothing )
+        , ( 1, map Just parser )
         ]
 
 
 {-| -}
 parseBool : Parser Bool
 parseBool =
-    read
-        |> andThen
-            (\v ->
-                case v of
-                    1 ->
-                        succeed True
-
-                    0 ->
-                        succeed False
-
-                    _ ->
-                        fail "bool error"
-            )
+    parseUnion
+        [ ( 0, succeed False )
+        , ( 1, succeed True )
+        ]
 
 
 {-| -}

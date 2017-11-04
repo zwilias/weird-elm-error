@@ -44,7 +44,7 @@ type alias Interface =
     , types : Types
     , unions : Unions
     , aliases : Aliases
-    , fixities : Infix
+    , fixities : List Infix
     }
 
 
@@ -173,7 +173,7 @@ parseInterface =
                 |= parseTypes
                 |= parseUnions
                 |= parseAliases
-                |= parseInfix
+                |= parseInfixes
         )
 
 
@@ -298,8 +298,8 @@ parseExport =
     lazy
         (\_ ->
             parseUnion
-                [ ( 0, succeed ExportValue |= parseString )
-                , ( 1, succeed ExportAlias |= parseString )
+                [ ( 0, map ExportValue parseString )
+                , ( 1, map ExportAlias parseString )
                 , ( 2, succeed ExportUnion |= parseString |= parseListing )
                 ]
         )
@@ -407,6 +407,11 @@ parseAliasedCanonical =
                 , ( 1, succeed Filled |= parseCanonical )
                 ]
         )
+
+
+parseInfixes : Parser (List Infix)
+parseInfixes =
+    parseList parseInfix
 
 
 {-| -}
