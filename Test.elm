@@ -1,6 +1,7 @@
 module Test exposing (..)
 
 import Elmi.Interface
+import Elmi.Parser as Parser
 import Html exposing (Html)
 
 
@@ -17,9 +18,9 @@ init : List Int -> ( String, Cmd Msg )
 init flags =
     let
         coco =
-            Elmi.Interface.parseInterface flags
+            Parser.run Elmi.Interface.parseInterface flags
     in
-        (toString coco) ! []
+    toString coco ! []
 
 
 type Msg

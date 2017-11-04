@@ -1,27 +1,27 @@
 module Elmi.Interface
     exposing
-        ( Interface
-        , Version
-        , PackageName
-        , Imports
-        , Types
-        , Unions
+        ( AliasedCanonical
         , Aliases
-        , UnionInfo
-        , CanonicalVar
-        , CanonicalModuleName
-        , Exports
-        , Export
         , Canonical
-        , AliasedCanonical
+        , CanonicalModuleName
+        , CanonicalVar
+        , Export
+        , Exports
         , Home
+        , Imports
         , Infix
+        , Interface
+        , PackageName
+        , Types
+        , UnionInfo
+        , Unions
+        , Version
         , parseInterface
         )
 
 {-|
 
-@docs Interface, Version, PackageName, Imports, Types, Unions, Aliases, UnionInfo, CanonicalVar, CanonicalModuleName, Exports, Export, Canonical, AliasedCanonical, Home,  Infix, parseInterface
+@docs Interface, Version, PackageName, Imports, Types, Unions, Aliases, UnionInfo, CanonicalVar, CanonicalModuleName, Exports, Export, Canonical, AliasedCanonical, Home, Infix, parseInterface
 
 private :
 
@@ -29,7 +29,6 @@ parseVersion, parsePackageName, parseImports, parseTypes, parseUnions, parseAlia
 
 -}
 
-import Elmi.Ascii
 import Elmi.Parser exposing (..)
 
 
@@ -166,7 +165,7 @@ parseInterface : Parser Interface
 parseInterface =
     lazy
         (\_ ->
-            parse Interface
+            succeed Interface
                 |= parseVersion
                 |= parsePackageName
                 |= parseExports
@@ -183,7 +182,7 @@ parseVersion : Parser Version
 parseVersion =
     lazy
         (\_ ->
-            parse Version
+            succeed Version
                 |= parseInt
                 |= parseInt
                 |= parseInt
@@ -193,7 +192,7 @@ parseVersion =
 {-| -}
 parsePackageName : Parser PackageName
 parsePackageName =
-    parse PackageName
+    succeed PackageName
         |= parseString
         |= parseString
 
@@ -253,7 +252,7 @@ parseCanonicalVar : Parser CanonicalVar
 parseCanonicalVar =
     lazy
         (\_ ->
-            parse CanonicalVar
+            succeed CanonicalVar
                 |= parseHome
                 |= parseString
         )
@@ -264,7 +263,7 @@ parseCanonicalModuleName : Parser CanonicalModuleName
 parseCanonicalModuleName =
     lazy
         (\_ ->
-            parse CanonicalModuleName
+            succeed CanonicalModuleName
                 |= parsePackageName
                 |= parseList parseString
         )
@@ -276,10 +275,10 @@ parseHome =
     lazy
         (\_ ->
             parseUnion
-                [ ( 0, parseEnum BuiltIn )
+                [ ( 0, succeed BuiltIn )
                 , ( 1, map Module parseCanonicalModuleName )
                 , ( 2, map TopLevel parseCanonicalModuleName )
-                , ( 3, parseEnum Local )
+                , ( 3, succeed Local )
                 ]
         )
 
@@ -299,9 +298,9 @@ parseExport =
     lazy
         (\_ ->
             parseUnion
-                [ ( 0, parse ExportValue |= parseString )
-                , ( 1, parse ExportAlias |= parseString )
-                , ( 2, parse ExportUnion |= parseString |= parseListing )
+                [ ( 0, succeed ExportValue |= parseString )
+                , ( 1, succeed ExportAlias |= parseString )
+                , ( 2, succeed ExportUnion |= parseString |= parseListing )
                 ]
         )
 
@@ -311,7 +310,7 @@ parseListing : Parser Listing
 parseListing =
     lazy
         (\_ ->
-            parse Listing
+            succeed Listing
                 |= parseList parseString
                 |= parseBool
         )
@@ -338,7 +337,7 @@ parseLambda : Parser Canonical
 parseLambda =
     lazy
         (\_ ->
-            parse Lambda
+            succeed Lambda
                 |= parseCanonical
                 |= parseCanonical
         )
@@ -349,7 +348,7 @@ parseVar : Parser Canonical
 parseVar =
     lazy
         (\_ ->
-            parse Var
+            succeed Var
                 |= parseString
         )
 
@@ -359,7 +358,7 @@ parseType : Parser Canonical
 parseType =
     lazy
         (\_ ->
-            parse Type
+            succeed Type
                 |= parseCanonicalVar
         )
 
@@ -369,7 +368,7 @@ parseApp : Parser Canonical
 parseApp =
     lazy
         (\_ ->
-            parse App
+            succeed App
                 |= parseCanonical
                 |= parseList parseCanonical
         )
@@ -380,7 +379,7 @@ parseRecord : Parser Canonical
 parseRecord =
     lazy
         (\_ ->
-            parse Record
+            succeed Record
                 |= parseList (parseTuple parseString parseCanonical)
                 |= parseMaybe parseCanonical
         )
@@ -391,7 +390,7 @@ parseAliased : Parser Canonical
 parseAliased =
     lazy
         (\_ ->
-            parse Aliased
+            succeed Aliased
                 |= parseCanonicalVar
                 |= parseList (parseTuple parseString parseCanonical)
                 |= parseAliasedCanonical
@@ -404,8 +403,8 @@ parseAliasedCanonical =
     lazy
         (\_ ->
             parseUnion
-                [ ( 0, parse Holley |= parseCanonical )
-                , ( 1, parse Filled |= parseCanonical )
+                [ ( 0, succeed Holley |= parseCanonical )
+                , ( 1, succeed Filled |= parseCanonical )
                 ]
         )
 
@@ -415,7 +414,7 @@ parseInfix : Parser Infix
 parseInfix =
     lazy
         (\_ ->
-            parse Infix
+            succeed Infix
                 |= parseString
                 |= parseAssoc
                 |= parseInt
@@ -428,8 +427,8 @@ parseAssoc =
     lazy
         (\_ ->
             parseUnion
-                [ ( 0, parseEnum L )
-                , ( 1, parseEnum N )
-                , ( 1, parseEnum R )
+                [ ( 0, succeed L )
+                , ( 1, succeed N )
+                , ( 1, succeed R )
                 ]
         )

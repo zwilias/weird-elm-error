@@ -1,10 +1,15 @@
 module Elmi.Parser exposing (..)
 
-{-| # Set of helpers to parse lists of HEX
+{-|
+
+
+# Set of helpers to parse lists of HEX
+
 
 ## Types
 
 @docs Hex, Parser
+
 
 # Functions
 
@@ -13,12 +18,11 @@ module Elmi.Parser exposing (..)
 -}
 
 import Bitwise
-import Result
 import Elmi.Ascii
+import Result
 
 
-{-|
--}
+{-| -}
 type alias Hex =
     Int
 
@@ -28,186 +32,196 @@ intLength =
     8
 
 
-{-|
--}
+{-| -}
 type alias Tape =
     List Hex
 
 
-{-|
--}
-type alias Parser a =
-    Tape -> Result String ( a, Tape )
+{-| -}
+type Parser a
+    = Parser (Tape -> Result String ( a, Tape ))
 
 
-{-|
--}
-parse : (a -> b) -> Tape -> Result String ( a -> b, Tape )
-parse fn tape =
-    Ok ( fn, tape )
+{-| -}
+succeed : a -> Parser a
+succeed val =
+    Parser <|
+        \tape ->
+            Ok ( val, tape )
 
 
-{-|
--}
-parseEnum : a -> Tape -> Result String ( a, Tape )
-parseEnum v tape =
-    Ok ( v, tape )
+fail : String -> Parser a
+fail error =
+    Parser <| \_ -> Err error
 
 
-{-|
--}
-map : (a -> b) -> (Tape -> Result String ( a, Tape )) -> Parser b
-map fn parser tape =
-    case parser tape of
-        Ok ( value, tape_ ) ->
-            Ok ( fn value, tape_ )
-
-        Err err ->
-            Err err
+{-| -}
+map : (a -> b) -> Parser a -> Parser b
+map fn (Parser parserFn) =
+    Parser <|
+        \tape ->
+            parserFn tape |> Result.map (Tuple.mapFirst fn)
 
 
-{-|
--}
-take : Int -> Parser (List Hex)
-take length list =
-    let
-        acc =
-            List.take length list
+{-| -}
+apply : Parser (a -> b) -> Parser a -> Parser b
+apply (Parser aToBFn) (Parser nextFn) =
+    Parser <|
+        \tape ->
+            case aToBFn tape of
+                Ok ( fn, tape_ ) ->
+                    nextFn tape_ |> Result.map (Tuple.mapFirst fn)
 
-        rest =
-            List.drop length list
-    in
-        Ok ( Debug.log (Elmi.Ascii.toString acc) acc, rest )
-
-
-{-|
--}
-andThen : Parser (a -> b) -> Parser a -> Parser b
-andThen tagger next tape =
-    case tagger tape of
-        Ok ( fn, tape_ ) ->
-            map fn next tape_
-
-        Err err ->
-            Err err
+                Err e ->
+                    Err e
 
 
-{-|
--}
+{-| -}
 (|=) : Parser (a -> b) -> Parser a -> Parser b
 (|=) =
-    andThen
+    apply
 
 
-{-|
--}
-with : Parser a -> (a -> Parser b) -> Parser b
-with tagger next tape =
-    case tagger tape of
-        Ok ( value, tape_ ) ->
-            next value tape_
+{-| -}
+andThen : (a -> Parser b) -> Parser a -> Parser b
+andThen toParserB (Parser parserAFn) =
+    Parser <|
+        \tape ->
+            case parserAFn tape of
+                Ok ( value, tape_ ) ->
+                    let
+                        (Parser parserBFn) =
+                            toParserB value
+                    in
+                    parserBFn tape_
 
-        Err err ->
-            Err err
-
-
-{-|
--}
-(|.) : Parser a -> (a -> Parser b) -> Parser b
-(|.) =
-    with
+                Err err ->
+                    Err err
 
 
-{-|
--}
+read : Parser Int
+read =
+    Parser <|
+        \tape ->
+            case tape of
+                x :: xs ->
+                    Ok ( x, xs )
+
+                [] ->
+                    Err "End of tape"
+
+
+take : Int -> Parser (List Int)
+take count =
+    Parser <|
+        \tape ->
+            let
+                taken : Tape
+                taken =
+                    List.take count tape
+
+                left : Tape
+                left =
+                    List.drop count tape
+            in
+            Ok ( taken, left )
+
+
+{-| -}
 parseInt : Parser Int
 parseInt =
     map
         (Tuple.second
             << List.foldl
                 (\value ( shift, acc ) ->
-                    ( shift - 1, acc + (Bitwise.shiftLeftBy (4 * shift) value) )
+                    ( shift - 1, acc + Bitwise.shiftLeftBy (4 * shift) value )
                 )
                 ( intLength - 1, 0 )
         )
         (take intLength)
 
 
-{-|
--}
+{-| -}
 parseString : Parser String
 parseString =
     parseInt
-        |. (\size tape ->
-                case take size tape of
-                    Ok ( t, rest ) ->
-                        Ok ( Elmi.Ascii.toString t, rest )
-
-                    Err err ->
-                        Err err
-           )
+        |> andThen take
+        |> map Elmi.Ascii.toString
 
 
-{-|
--}
+{-| -}
 parseList : Parser a -> Parser (List a)
 parseList parser =
-    parseInt
-        |. (\size ->
-                parseListHelp parser ( size, [] )
-           )
+    parseInt |> andThen (parseListHelp parser [])
 
 
-{-|
--}
-parseListHelp : Parser a -> ( Int, List a ) -> Parser (List a)
-parseListHelp parser ( size, acc ) tape =
+{-| -}
+parseListHelp : Parser a -> List a -> Int -> Parser (List a)
+parseListHelp parser acc size =
     if size == 0 then
-        Ok ( acc, tape )
+        succeed (List.reverse acc)
     else
-        case parser tape of
-            Ok ( item, tape_ ) ->
-                parseListHelp parser ( size - 1, item :: acc ) tape_
-
-            Err err ->
-                Err err
+        parser |> andThen (\parsed -> parseListHelp parser (parsed :: acc) (size - 1))
 
 
-{-|
--}
 parseUnion : List ( Int, Parser a ) -> Parser a
-parseUnion choices tape =
-    case tape of
-        code :: rest ->
-            List.foldr
-                (\( unionCode, parser ) value ->
-                    if code == unionCode then
-                        parser rest
-                    else
-                        value
-                )
-                (Err "Not in union.")
-                choices
+parseUnion choices =
+    read
+        |> andThen
+            (\code ->
+                List.foldl
+                    (\( unionCode, parser ) result ->
+                        if code == unionCode then
+                            parser
+                        else
+                            result
+                    )
+                    (fail "Not in union.")
+                    choices
+            )
 
-        [] ->
-            Err "List is too short."
 
-
-{-|
--}
+{-| -}
 parseTuple : Parser a -> Parser b -> Parser ( a, b )
 parseTuple p1 p2 =
-    parse (,)
+    succeed (,)
         |= p1
         |= p2
 
 
-{-|
-parseMaybe : Parser a -> Parser (Maybe a)
+run : Parser a -> Tape -> Result String ( a, Tape )
+run (Parser parserFn) tape =
+    parserFn tape
+
+
+oneOf : List (Parser a) -> Parser a
+oneOf options =
+    Parser <|
+        \tape ->
+            List.foldl
+                (\parser acc ->
+                    case acc of
+                        Nothing ->
+                            case run parser tape of
+                                Err _ ->
+                                    Nothing
+
+                                Ok res ->
+                                    Just <| Ok res
+
+                        Just _ ->
+                            acc
+                )
+                Nothing
+                options
+                |> Maybe.withDefault (Err "None worked :(")
+
+
+{-| parseMaybe : Parser a -> Parser (Maybe a)
 parseMaybe p tape =
-    case tape of
-        0 :: rest ->
-            Ok ( Nothing, rest )
+case tape of
+0 :: rest ->
+Ok ( Nothing, rest )
 
         1 :: list ->
             map Just p list
@@ -217,32 +231,32 @@ parseMaybe p tape =
 
 -}
 parseMaybe : Parser a -> Parser (Maybe a)
-parseMaybe p tape =
-    case p tape of
-        Ok ( value, rest ) ->
-            Ok ( Just value, rest )
-
-        _ ->
-            Ok ( Nothing, tape )
+parseMaybe parser =
+    oneOf
+        [ map Just parser
+        , succeed Nothing
+        ]
 
 
-{-|
--}
+{-| -}
 parseBool : Parser Bool
-parseBool tape =
-    case tape of
-        1 :: rest ->
-            Ok ( True, rest )
+parseBool =
+    read
+        |> andThen
+            (\v ->
+                case v of
+                    1 ->
+                        succeed True
 
-        0 :: rest ->
-            Ok ( False, rest )
+                    0 ->
+                        succeed False
 
-        _ ->
-            Err "Bool error"
+                    _ ->
+                        fail "bool error"
+            )
 
 
-{-|
--}
+{-| -}
 lazy : (() -> Parser a) -> Parser a
 lazy fn =
-    fn ()
+    succeed () |> andThen fn
